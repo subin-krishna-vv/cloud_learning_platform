@@ -1,11 +1,9 @@
 # Cloud-Native GitOps Platform — Learning & Build Plan
 
-> A single GitHub project that covers every missing skill for a senior DevOps role
-> at a mid-size product company.
+> A comprehensive learning project to master cloud-native technologies and DevOps practices.
 >
-> **Estimated timeline:** 16 weekends (roughly 4 months alongside your job)
-> **Outcome:** One well-documented GitHub repo that answers every interview question
-> on GitOps, observability, SRE, security, secrets, policy, and automation.
+> **Estimated timeline:** 16 weekends (roughly 4 months)
+> **Outcome:** One well-documented GitHub repo covering GitOps, observability, SRE, security, secrets, policy, and automation.
 
 ---
 
@@ -25,8 +23,7 @@ A production-inspired **GitOps platform** that deploys a simple Python Flask API
 - **GitHub Actions** for the CI/CD pipeline
 
 The application is intentionally simple. The complexity and learning
-is entirely in the platform around it — which is exactly how product company
-infrastructure works.
+is entirely in the platform around it — which is exactly how modern cloud infrastructure works.
 
 ---
 
