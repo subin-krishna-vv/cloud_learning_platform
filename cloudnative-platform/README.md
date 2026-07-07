@@ -8,10 +8,18 @@ A learning project with a simple Flask application.
 
 ### Install & Run the Flask App
 
+**Locally:**
 ```bash
 cd app
 pip install -r requirements.txt
 python3 src/main.py
+```
+
+**In Docker:**
+```bash
+cd app
+docker build -t flask-app:1.0 .
+docker run -p 5000:5000 flask-app:1.0
 ```
 
 App starts at: **`http://localhost:5000`**
@@ -49,6 +57,12 @@ Response: `{"application": "flask-app", "message": "Cloud-Native Learning Platfo
 curl http://localhost:5000/api/v1/status
 ```
 Response: `{"status": "operational", "message": "App is running"}`
+
+**Items** (Hardcoded List)
+```bash
+curl http://localhost:5000/items
+```
+Response: `{"items": [...], "count": 3}`
 
 **Process Data** (POST)
 ```bash

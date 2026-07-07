@@ -68,6 +68,18 @@ def status():
         "message": "App is running"
     }), 200
 
+@app.route("/items", methods=["GET"])
+def get_items():
+    """Get hardcoded list of items"""
+    return jsonify({
+        "items": [
+            {"id": 1, "name": "Item 1", "description": "First item"},
+            {"id": 2, "name": "Item 2", "description": "Second item"},
+            {"id": 3, "name": "Item 3", "description": "Third item"}
+        ],
+        "count": 3
+    }), 200
+
 # ============================================================================
 # Error Handlers
 # ============================================================================
