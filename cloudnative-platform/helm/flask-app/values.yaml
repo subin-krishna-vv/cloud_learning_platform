@@ -1,0 +1,47 @@
+appLabel: flask-app
+versionLabel: v1
+replicaCount: 2
+containerName: flask-app-container
+image:
+  repository: kind_flask_app
+  tag: latest
+  pullPolicy: IfNotPresent
+containerPortName: http
+containerPort: 5000
+containerPortProtocol: TCP
+livenessProbe:
+  path: /health/live
+  port: 5000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 1
+  failureThreshold: 3
+readinessProbe:
+  path: /health/ready
+  port: 5000
+  initialDelaySeconds: 5
+  periodSeconds: 10
+  timeoutSeconds: 1 
+  failureThreshold: 3
+resources:
+  requests:
+    cpu: 100m
+    memory: 128Mi
+  limits:
+    cpu: 200m
+    memory: 256Mi
+env:
+  - name: FLASK_ENV
+    value: development
+  - name: FLASK_APP
+    value: app.py
+  - name: LOG_LEVEL
+    value: INFO
+  - name: APP_PORT
+    value: "5000"
+service:
+  type: ClusterIP
+  portName: http
+  port: 5000
+  targetPort: 5000
+  protocol: TCP 

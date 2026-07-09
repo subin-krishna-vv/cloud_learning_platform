@@ -7,6 +7,25 @@
 
 ---
 
+## How to Use This Plan
+
+This is a **self-directed learning workbook**, not a step-by-step tutorial.
+
+- Each phase introduces a **practical scenario** on the shared platform project below.
+- Tasks are **problems** covering beginner → intermediate → advanced features of each tool.
+- **Hints** point you to concepts, documentation, and common failure modes — not complete answers.
+- **Expected outcomes** tell you how to verify a task is done (cluster state, UI, command output).
+- Research, design configs, and validate yourself. Break things intentionally — that is how you learn.
+- Complete tasks in order within each phase. Check off the **Phase Completion Checklist** before moving on.
+
+**Task table format:**
+
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| Phase.Level# | What you must figure out and build | Where to look, what to watch for | Observable proof it works |
+
+---
+
 ## What You Are Building
 
 A production-inspired **GitOps platform** that deploys a simple Python Flask API using:
@@ -135,290 +154,79 @@ cloudnative-platform/
 **Duration:** Weekend 1–2
 **Goal:** Get a local K8s cluster running and deploy the Flask app manually using Helm.
 
-### Core Concepts to Learn
+### Practical Scenario
 
-**Kind (Kubernetes in Docker)**
-Kind runs a real Kubernetes cluster inside Docker containers on your laptop.
-It is the standard tool for local K8s development because it closely mirrors
-production clusters. You are not learning a simplified version — Kind uses
-the same control plane components as EKS.
+The platform does not exist yet. You need a reproducible local Kubernetes environment and a containerised Flask API deployed via Helm before any GitOps, security, or observability layers can be added.
 
-Key things to understand:
-- How Kind creates a multi-node cluster using Docker containers as nodes
-- The Kind config file and how to define control plane and worker nodes
-- How `kubectl` connects to the Kind cluster via kubeconfig context
+### Core Concepts (condensed)
 
-**Helm — Going Deeper Than You Think**
-You likely know Helm basics. For this project, focus on what product company
-interviews actually probe:
-- `values.yaml` override hierarchy — base values, environment-specific values, and `--set` flags
-- What `helm upgrade --install` does atomically and why it matters for deployments
-- Helm hooks — `pre-install`, `post-upgrade` — and when to use them
-- Difference between `helm template` (renders manifests locally) and `helm install`
-- How Helm stores release history as Secrets and how rollback works
+**Kind**
+- Runs a real Kubernetes control plane inside Docker containers on your laptop
+- Kind config file defines control plane and worker node topology
+- `kubectl` connects via kubeconfig context pointing at the Kind cluster
 
-**Helm Chart Authoring — Writing Templates from Scratch**
+**Docker**
+- Multi-stage builds reduce image size and attack surface
+- Non-root users limit container breakout impact
+- Pin base image versions — never use floating tags in production charts
 
-Most engineers can run `helm install`. Far fewer can write a well-structured chart
-from scratch and debug it when templates fail. This is the gap interviewers look for
-at senior level. You are going to write every template file in this project yourself
-— not copy from a generator.
+**Helm**
+- Charts package Kubernetes manifests with templating and value overrides
+- `values.yaml` hierarchy: base → environment file → `--set` flags
+- `helm template` renders locally; `helm upgrade --install` applies atomically
+- Release history stored as Secrets; rollback reverts to prior revision
+- Templates use Go `text/template` — not YAML with variables; whitespace control (`{{-`, `-}}`) matters
+- Built-in objects: `.Values`, `.Release`, `.Chart`, `.Capabilities`
+- Key functions: `default`, `quote`, `toYaml`, `nindent`, `include`, `required`
+- Flow control: `if/else`, `range`, `with` — scope changes inside `with` blocks
+- `_helpers.tpl` defines named templates (`fullname`, `labels`, `selectorLabels`)
+- `include` preferred over `template` for nested YAML indentation
+- `values.schema.json` validates values before render
+- `helm lint`, `helm template`, `helm test` for validation
 
-**Template Language Fundamentals**
-Helm uses Go's `text/template` engine. Every `.yaml` file in `templates/` is processed
-through this engine before being sent to Kubernetes. The key mental model: the template
-is not YAML — it is a program that generates YAML. If you think of it as YAML with
-some variables, you will be confused by whitespace and indentation issues.
+### Tasks
 
-Built-in objects you will use constantly:
-- `{{ .Values.image.repository }}` — reads from `values.yaml` or overrides
-- `{{ .Release.Name }}` — the name you gave when running `helm install myrelease ./chart`
-- `{{ .Release.Namespace }}` — the Kubernetes namespace of the release
-- `{{ .Chart.Name }}` — reads from `Chart.yaml`
-- `{{ .Chart.AppVersion }}` — the application version from `Chart.yaml`
-- `{{ .Capabilities.APIVersions }}` — what API versions the cluster supports
-  (useful for writing charts compatible with multiple K8s versions)
+#### Beginner — Kind and kubectl
 
-Template functions you must know:
-- `default` — provides a fallback value: `{{ .Values.replicas | default 1 }}`
-- `quote` — wraps in quotes for YAML safety: `{{ .Values.name | quote }}`
-- `toYaml` — converts a YAML object to a string: `{{ toYaml .Values.resources | nindent 12 }}`
-- `nindent` — adds a newline and indentation: critical for embedding multi-line YAML
-- `include` — calls a named template and captures the output as a string
-- `required` — fails the render if a value is missing:
-  `{{ required "image.repository is required" .Values.image.repository }}`
-- `tpl` — renders a string as a template: useful for values that contain template expressions
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 1.B1 | Stand up a local Kubernetes cluster you can reach with kubectl | Kind quick start docs; define cluster topology in a config file under `kind/` | `kubectl get nodes` shows expected nodes Ready |
+| 1.B2 | Deploy a minimal workload and confirm the cluster is functional | Use any simple image first if needed before your app chart | Pod reaches Running; you can reach it via port-forward or service |
 
-Pipelines chain functions left to right, just like Unix pipes:
-```
-{{ .Values.name | default "flask-app" | quote }}
-```
-This reads `.Values.name`, falls back to `"flask-app"` if not set, then wraps it in quotes.
+#### Beginner — Docker and Flask app
 
-**Flow Control in Templates**
-Templates are not just variable substitution — they have full programming logic.
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 1.B3 | Build a Flask API with `GET /health` and `GET /items` endpoints | Keep the app simple — platform complexity comes later | `pytest` passes; endpoints return expected JSON locally |
+| 1.B4 | Containerise the app with production-minded Dockerfile choices | Non-root user, pinned base image version, multi-stage build | Image builds; container runs and serves `/health` |
 
-`if/else` — conditionally include entire Kubernetes resources:
-```yaml
-{{- if .Values.ingress.enabled }}
-apiVersion: networking.k8s.io/v1
-kind: Ingress
-metadata:
-  name: {{ include "flask-app.fullname" . }}
-  # ... rest of Ingress spec
-{{- end }}
-```
-This is the production pattern: your chart supports Ingress but it is optional.
-Teams without an ingress controller set `ingress.enabled: false` and the resource
-is not created at all.
+#### Intermediate — Helm deployment
 
-`range` — loop over lists or maps:
-```yaml
-env:
-  {{- range .Values.env }}
-  - name: {{ .name }}
-    value: {{ .value | quote }}
-  {{- end }}
-```
-This lets you define environment variables in `values.yaml` as a list and the
-template generates the correct YAML for each entry. No hardcoded env vars in templates.
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 1.I1 | Create a Helm chart under `helm/flask-app/` that deploys the Flask app | Deployment, Service, probes, resource requests/limits, labels on every resource | `helm install` succeeds; `/health` returns 200 from inside cluster |
+| 1.I2 | Support environment-specific configuration via separate values files | `values-dev.yaml` and `values-prod.yaml` with different replica counts and resource limits | Same chart renders different configs per environment file |
 
-`with` — change the scope to avoid repetition:
-```yaml
-{{- with .Values.resources }}
-resources:
-  {{- toYaml . | nindent 2 }}
-{{- end }}
-```
-Inside the `with` block, `.` refers to `.Values.resources` — shorter and cleaner.
-But be careful: inside `with`, you cannot access `.Release.Name` — you need `$` for the root scope.
+#### Advanced — Helm chart authoring
 
-**Whitespace control — the most common source of Helm bugs:**
-`{{-` trims all whitespace before the tag. `-}}` trims all whitespace after.
-Without these, your rendered YAML will have blank lines that either break parsing
-or create resources with empty fields. When debugging a Helm chart that produces
-invalid YAML, whitespace is almost always the cause. Use `helm template` to render
-locally and inspect the output.
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 1.A1 | Write `templates/_helpers.tpl` with `fullname`, `labels`, and `selectorLabels` named templates | 63-char name truncation; selector labels must be immutable subset; use `include` with `nindent` | All templates use helpers consistently; rendered YAML has no indentation errors |
+| 1.A2 | Make Ingress optional via values; loop env vars from a list in values | `if .Values.ingress.enabled`; `range` over `.Values.env` | `helm template` with dev values includes Ingress; prod values omit it; env vars differ per environment |
+| 1.A3 | Add `values.schema.json` and validate the chart before deploy | Required fields for image; minimum replica count; run `helm lint` and `helm template` | Schema error when required values missing; lint passes; dry-run apply validates rendered manifests |
 
-**Named Templates and _helpers.tpl**
-The `_helpers.tpl` file is where you define reusable template snippets. Files starting
-with `_` are not rendered as Kubernetes manifests — they only define helpers.
-
-The standard pattern every production chart follows:
-
-```yaml
-# templates/_helpers.tpl
-
-{{/* Generate the full name of the release */}}
-{{- define "flask-app.fullname" -}}
-{{- if .Values.fullnameOverride }}
-{{- .Values.fullnameOverride | trunc 63 | trimSuffix "-" }}
-{{- else }}
-{{- printf "%s-%s" .Release.Name .Chart.Name | trunc 63 | trimSuffix "-" }}
-{{- end }}
-{{- end }}
-
-{{/* Common labels applied to every resource */}}
-{{- define "flask-app.labels" -}}
-helm.sh/chart: {{ .Chart.Name }}-{{ .Chart.Version | replace "+" "_" }}
-app.kubernetes.io/name: {{ .Chart.Name }}
-app.kubernetes.io/instance: {{ .Release.Name }}
-app.kubernetes.io/version: {{ .Chart.AppVersion | quote }}
-app.kubernetes.io/managed-by: {{ .Release.Service }}
-{{- end }}
-
-{{/* Selector labels — used in Deployment matchLabels and Service selector */}}
-{{- define "flask-app.selectorLabels" -}}
-app.kubernetes.io/name: {{ .Chart.Name }}
-app.kubernetes.io/instance: {{ .Release.Name }}
-{{- end }}
-```
-
-Why this matters:
-- Every resource in your chart uses `{{ include "flask-app.labels" . | nindent 4 }}`
-  for consistent labelling. If you need to add a label, you change one file.
-- Selector labels are a subset of all labels. Deployment `matchLabels` and Service
-  `selector` must use only immutable labels — they cannot change after creation.
-  Separating selector labels from metadata labels is not optional, it is required.
-- `include` is preferred over `template` because `include` captures the output as a
-  string that you can pipe through `nindent`. `template` outputs directly and cannot
-  be indented — this breaks nested YAML every time.
-
-**Chart Dependencies and Subcharts**
-A Helm chart can depend on other charts. You declare dependencies in `Chart.yaml`:
-
-```yaml
-# Chart.yaml
-dependencies:
-  - name: postgresql
-    version: "12.x.x"
-    repository: "https://charts.bitnami.com/bitnami"
-    condition: postgresql.enabled
-```
-
-Running `helm dependency update` downloads the dependency into the `charts/` directory.
-You pass values to the subchart by nesting under its name in `values.yaml`:
-
-```yaml
-# values.yaml
-postgresql:
-  enabled: true
-  auth:
-    postgresPassword: "changeme"
-    database: "flaskdb"
-```
-
-The `condition` field means the subchart is only deployed when `postgresql.enabled`
-is true. This is how you make dependencies optional — dev environments might use
-a local PostgreSQL, while prod uses an external RDS.
-
-When to use subcharts vs separate Helm releases:
-- Use subcharts when the dependency is tightly coupled and should be deployed atomically
-  (e.g., an app bundled with its database for local dev)
-- Use separate releases when the dependency is shared infrastructure managed by a
-  different team (e.g., Prometheus, Vault, Kyverno)
-
-For this project, your Flask app chart does not need subcharts — all platform
-components are separate Helm releases managed through ArgoCD. But understanding
-subcharts is critical because you will encounter them in every third-party chart you install.
-
-**Chart Testing and Validation**
-Before deploying, validate your chart at three levels:
-
-`helm lint ./helm/flask-app/` — checks for syntax errors, missing required fields
-in `Chart.yaml`, and best practice violations. Run this in CI on every PR. A chart
-that fails lint should never be deployed.
-
-`helm template myrelease ./helm/flask-app/ -f helm/flask-app/values-dev.yaml` —
-renders all templates locally without contacting a cluster. This is the most important
-debugging tool. When a template produces broken YAML, run this command, inspect the
-output, and find the issue. Pipe through `kubectl apply --dry-run=client -f -` for
-full validation including Kubernetes schema checks.
-
-`helm test myrelease` — runs test pods defined in `templates/tests/`. Write a simple
-test that curls the `/health` endpoint and asserts a 200 response. Helm tests run
-after install and are used in CI to verify a release actually works.
-
-`values.schema.json` — a JSON Schema file at the root of your chart that validates
-`values.yaml` before rendering. If someone forgets to set `image.repository`, the
-chart fails immediately with a clear error instead of deploying a broken manifest.
-
-```json
-{
-  "$schema": "https://json-schema.org/draft/2020-12/schema",
-  "type": "object",
-  "required": ["image"],
-  "properties": {
-    "image": {
-      "type": "object",
-      "required": ["repository", "tag"],
-      "properties": {
-        "repository": { "type": "string" },
-        "tag": { "type": "string" }
-      }
-    },
-    "replicaCount": { "type": "integer", "minimum": 1 }
-  }
-}
-```
-
-### What to Build
-
-1. Install Kind and create a 3-node cluster (1 control plane, 2 workers) using a `kind-config.yaml`
-2. Write the Flask app — two endpoints: `GET /health` returns `{"status": "ok"}`,
-   `GET /items` returns a hardcoded list
-3. Write the Dockerfile — use a non-root user, multi-stage build, pin the base image to a specific version
-4. Write the Helm chart with proper resource requests/limits, liveness and readiness probes,
-   and meaningful labels on every resource
-5. Write `templates/_helpers.tpl` with three named templates: `fullname` (release name
-   generation with 63-char truncation), `labels` (standard Kubernetes labels including
-   chart version and managed-by), and `selectorLabels` (immutable subset for Deployment
-   matchLabels and Service selector). Use `include` with `nindent` in every template file.
-6. Add conditional Ingress creation — the Ingress resource only renders when
-   `ingress.enabled: true` in values. Set it to `true` in `values-dev.yaml` and
-   `false` in `values-prod.yaml`. Verify with `helm template` that the Ingress
-   appears in dev output and is absent in prod output.
-7. Add a `range` loop for environment variables in `templates/deployment.yaml` —
-   define env vars as a list in `values.yaml` instead of hardcoding them. Include
-   at least `FLASK_ENV`, `LOG_LEVEL`, and `APP_PORT` with different values per environment.
-8. Write `values.schema.json` at the chart root that enforces: `image.repository`
-   and `image.tag` are required strings, `replicaCount` is an integer with minimum 1.
-   Test that omitting `image.tag` causes `helm template` to fail with a schema error.
-9. Run `helm lint ./helm/flask-app/` and fix any warnings. Run
-   `helm template myrelease ./helm/flask-app/ -f helm/flask-app/values-dev.yaml`
-   and inspect the rendered output for both dev and prod values. Verify clean YAML
-   with no blank lines or indentation errors.
-10. Deploy manually with `helm install` and verify it works end to end
-
-### Why This Matters in Interviews
+### Why This Matters
 
 Non-root containers and resource limits are things Kyverno will enforce later.
-If you understand why they matter now, you can explain the entire security posture
-of your cluster end to end. That is a complete, senior-level interview answer.
+Understanding why they matter helps you grasp the security posture of your cluster.
 
-### Interview Scenario You Can Now Answer — Helm Chart Authoring
+### Phase Completion Checklist
 
-*"Walk me through how you write and structure a Helm chart for a new service."*
-
-I start with `Chart.yaml` defining the chart name, version, and appVersion. The
-`values.yaml` has sensible defaults for everything — replicas, image, resources,
-ingress — so the chart works out of the box with `helm install`. Environment-specific
-overrides go in `values-dev.yaml` and `values-prod.yaml` — different replica counts,
-resource limits, and feature flags per environment.
-
-For templates, `_helpers.tpl` defines three named templates: `fullname` for consistent
-resource naming with 63-character truncation, `labels` for standard Kubernetes labels
-on every resource, and `selectorLabels` as an immutable subset used in Deployment
-matchLabels and Service selectors. Every template file uses `include` with `nindent`
-rather than `template` — because `include` returns a string you can pipe through
-indentation functions, while `template` outputs directly and breaks nested YAML.
-
-Optional resources like Ingress are wrapped in `{{- if .Values.ingress.enabled }}`
-so they only render when needed. Environment variables use `range` loops over a list
-in values rather than being hardcoded. I validate with `helm lint` in CI on every PR,
-render with `helm template` piped through `kubectl apply --dry-run=client` for full
-schema validation, and enforce required values with a `values.schema.json` at the
-chart root. A missing `image.tag` fails the pipeline before it ever reaches the cluster.
+- [ ] Kind cluster running with expected node count → **Expected:** all nodes Ready
+- [ ] Flask app containerised and tested → **Expected:** image runs non-root; tests pass
+- [ ] Helm chart deploys app end-to-end → **Expected:** `/health` and `/items` reachable in cluster
+- [ ] Environment values produce different rendered output → **Expected:** dev vs prod `helm template` diff is meaningful
+- [ ] Chart passes lint and schema validation → **Expected:** `helm lint` clean; missing required values fail fast
 
 ---
 
@@ -427,57 +235,59 @@ chart root. A missing `image.tag` fails the pipeline before it ever reaches the 
 **Duration:** Weekend 3–4
 **Goal:** Replace manual `helm install` with fully automated GitOps delivery via ArgoCD.
 
-### Core Concepts to Learn
+### Practical Scenario
 
-**What GitOps Actually Means**
-GitOps is not just "deploy from Git." It is a specific operational model with four principles:
-1. Git is the single source of truth for desired state
-2. Desired state is declared, not imperative
-3. Approved changes to Git are applied automatically
-4. Software agents continuously reconcile actual state with desired state
+The Flask app deploys only when you run Helm manually. Changes are not auditable, drift goes undetected, and there is no single source of truth. Git must become the desired state for the cluster.
 
-The key mental model: in GitOps you never run `kubectl apply` manually in production.
-You push to Git, ArgoCD detects the diff and applies it. If someone manually changes
-something in the cluster, ArgoCD detects drift and auto-corrects it.
+### Core Concepts (condensed)
 
-**ArgoCD Architecture — Understand Each Component**
-- **API Server** — exposes the ArgoCD API and UI, handles authentication
-- **Repository Server** — clones Git repos, renders Helm/Kustomize manifests
-- **Application Controller** — the core reconciliation loop, watches cluster state vs Git state
-- **Dex** — optional OIDC provider for SSO integration
+- **GitOps:** Git is the source of truth; desired state is declared; agents reconcile continuously
+- **ArgoCD components:** API server (UI/API), repository server (renders charts), application controller (reconciliation loop)
+- **Application CRD:** defines source repo/path/chart, destination cluster/namespace, sync policy
+- **App of Apps:** one root Application deploys a folder of child Application manifests
+- **Sync policies:** `automated`, `selfHeal` (revert manual drift), `prune` (delete removed resources)
+- **Sync waves:** annotation `argocd.argoproj.io/sync-wave` controls deployment order
+- **Rollback:** Git revert restores prior desired state — no imperative kubectl in production
 
-**The App of Apps Pattern**
-Instead of manually creating each ArgoCD Application, you create one root Application
-that points to a folder containing other Application manifests. ArgoCD deploys the root
-app, which deploys all child apps automatically. This is how product companies manage
-tens or hundreds of services without manual setup.
-
-**Sync Policies and Sync Waves**
-- `automated` sync — ArgoCD polls Git every 3 minutes and applies changes automatically
-- `selfHeal` — ArgoCD reverts manual kubectl changes back to Git state
-- `prune` — ArgoCD deletes resources that were removed from Git
-- Sync waves — control the order of resource deployment using the annotation
-  `argocd.argoproj.io/sync-wave: "1"` — Vault must be up before the app
-
-### What to Build
-
-1. Install ArgoCD into your Kind cluster using the official manifest
-2. Create a `bootstrap/` folder with the root App of Apps manifest
-3. Create an ArgoCD Application for the Flask app pointing to your Helm chart
-4. Set up two environments — `dev` and `prod` — as separate namespaces with different Helm values
-5. Make a change to `values-dev.yaml`, push to Git, watch ArgoCD sync it automatically
-6. Enable `selfHeal` and manually scale a deployment via `kubectl` — watch ArgoCD correct it back
-7. Port-forward the ArgoCD UI and explore sync history and diff views
-
-### Interview Scenario You Can Now Answer
-
-*"Walk me through how a code change reaches production in your GitOps setup."*
+### GitOps Code Change Flow
 
 Developer merges PR → GitHub Actions CI runs (build, test, scan) → on success,
 the pipeline updates the image tag in the Helm values file in Git → ArgoCD detects
 the diff within 3 minutes → ArgoCD syncs the new Helm release to the cluster →
 sync history and diff are visible in the ArgoCD UI. Rollback is a Git revert —
 no kubectl commands, full audit trail.
+
+### Tasks
+
+#### Beginner — ArgoCD basics
+
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 2.B1 | Install ArgoCD and deploy the Flask Helm chart via a single Application | Official install manifest; Application spec fields; `argocd` namespace | `argocd app get` shows Synced/Healthy; app reachable in cluster |
+| 2.B2 | Access the ArgoCD UI and inspect sync status | Port-forward or ingress; initial admin credentials | UI loads; application health and sync state visible |
+
+#### Intermediate — Multi-environment GitOps
+
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 2.I1 | Structure `gitops/` with bootstrap and app manifests | Deliverables go in `gitops/bootstrap/` and `gitops/apps/` | ArgoCD manages Flask app from Git without manual `helm install` |
+| 2.I2 | Run separate dev and prod environments with different Helm values | Separate namespaces; different value files in `gitops/environments/` | Dev and prod deployments differ; both sync from Git |
+
+#### Advanced — Drift, rollback, and App of Apps
+
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 2.A1 | Implement App of Apps so child applications deploy automatically | Root Application points at `gitops/apps/` folder | Child apps appear without manual per-app setup |
+| 2.A2 | Enable selfHeal and prove drift is corrected | Manually scale deployment via kubectl; watch reconciliation | Replica count reverts to Git-defined value within a sync cycle |
+| 2.A3 | Roll back a bad change using Git only | ArgoCD sync history; git revert workflow | Previous revision restored; sync history shows rollback event |
+
+### Phase Completion Checklist
+
+- [ ] ArgoCD UI accessible → **Expected:** login works via port-forward or ingress
+- [ ] Flask app syncs from Git → **Expected:** no manual `helm install` needed for routine deploys
+- [ ] Dev and prod environments isolated → **Expected:** different namespaces, different Helm values
+- [ ] Drift self-healed → **Expected:** manual replica scale reverted within one sync cycle
+- [ ] Rollback demonstrated via Git revert → **Expected:** sync history shows restored revision
 
 ---
 
@@ -486,561 +296,271 @@ no kubectl commands, full audit trail.
 **Duration:** Weekend 5–6
 **Goal:** Remove all hardcoded secrets. Pull secrets dynamically from Vault at pod startup.
 
-### Core Concepts to Learn
+### Practical Scenario
 
-**Why Kubernetes Secrets Are Not Enough**
-Kubernetes Secrets are base64 encoded, not encrypted. Anyone with cluster access
-can read them. They also lack audit trails — you cannot answer "who read this secret
-and when?" Vault solves both problems.
+Database credentials or API keys are hardcoded in manifests or Kubernetes Secrets. There is no encryption at rest, no audit trail of who read what, and no path to rotation. Vault must inject secrets at runtime.
 
-**Vault Architecture — Key Components**
-- **Storage Backend** — where Vault persists encrypted data
-- **Auth Methods** — how clients authenticate to Vault. For Kubernetes, pods authenticate
-  using their ServiceAccount JWT token
-- **Secret Engines** — plugins that store or generate secrets. KV (key-value) is the most
-  common. Dynamic secrets (database credentials that expire) is the advanced use case
-- **Policies** — HCL files that define what a given identity can read or write in Vault
-- **Leases and TTLs** — every secret has a lease. When it expires, the app renews or
-  fetches a new one
+### Core Concepts (condensed)
 
-**Kubernetes Auth Method — The Full Flow**
-1. Pod starts with a mounted ServiceAccount token
-2. Vault Agent (sidecar) authenticates to Vault using that ServiceAccount token
-3. Vault validates the token against the Kubernetes API
-4. Vault returns a Vault token based on the bound role and its associated policy
-5. Vault Agent fetches secrets and writes them as files into a shared volume in the pod
-6. Your app reads secrets from files, not environment variables
+- **K8s Secrets limitation:** base64 encoded, not encrypted; weak audit story
+- **Vault components:** storage backend, auth methods, secret engines (KV), policies (HCL), leases/TTLs
+- **Kubernetes auth flow:** pod ServiceAccount JWT → Vault validates against K8s API → Vault token → secrets fetched
+- **Vault Agent Injector:** mutating webhook injects init container and sidecar via pod annotations
+- **Production pattern:** secrets as files with restricted permissions, not environment variables
+- **Dynamic secrets:** advanced use case — credentials generated on demand with TTL
 
-This is the production pattern. Environment variables are visible in process listings
-and container inspect output. Files with restricted permissions are safer.
+### Tasks
 
-**The Vault Agent Injector**
-The injector is a Kubernetes mutating admission webhook. When it sees a pod with
-specific Vault annotations, it automatically injects a Vault Agent init container
-and sidecar. You do not change your application code at all — only annotations
-on the deployment.
+#### Beginner — Vault fundamentals
 
-### What to Build
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 3.B1 | Run Vault locally on the cluster and store a KV secret | Official Vault Helm chart; dev mode for learning only | Secret written and read back via Vault CLI |
+| 3.B2 | Understand the difference between K8s Secrets and Vault for this platform | Compare audit, encryption, and access control models | Short note in `vault/README.md` explaining your choice |
 
-1. Install Vault in dev mode on your Kind cluster using the official Helm chart
-2. Enable the Kubernetes auth method and configure it with your cluster details
-3. Write a Vault policy (`flask-app-policy.hcl`) that allows read access to
-   `secret/data/flask-app/*`
-4. Create a Vault role that binds the policy to the Flask app's Kubernetes ServiceAccount
-5. Store a fake database password in Vault at `secret/flask-app/db`
-6. Add Vault annotations to your Helm chart's deployment template
-7. Verify the secret appears as a file inside the running pod at `/vault/secrets/db`
-8. Update the Flask app to read the secret from the file instead of an environment variable
-9. Write `vault/setup.sh` that automates steps 1–4 (this is also Python-adjacent automation)
+#### Intermediate — Kubernetes auth and injection
 
-### Interview Scenario You Can Now Answer
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 3.I1 | Enable Kubernetes auth and write a least-privilege policy for the Flask app | Policy in `vault/policies/`; bind to ServiceAccount via role | Policy allows read only on intended secret paths |
+| 3.I2 | Configure Vault Agent Injector so secrets appear as files in the running pod | Deployment annotations; shared volume path | Secret file visible inside pod at expected mount path |
+| 3.I3 | Update Flask app to read secret from file instead of environment variable | File read at startup; handle missing secret gracefully | App starts with Vault-injected credential; no secret in manifest or env |
 
-*"How do you handle secrets in Kubernetes? Why not just use K8s Secrets?"*
+#### Advanced — Automation and hardening
 
-K8s Secrets are base64, not encrypted, and lack audit trails. We use HashiCorp Vault
-with the Kubernetes auth method and the Vault Agent Injector. Pods authenticate to Vault
-using their ServiceAccount JWT — Vault validates it against the K8s API and the agent
-injects secrets as files into the pod. This gives us encryption at rest, fine-grained
-RBAC policies, full audit logs, and TTL-based secret rotation without restarting pods.
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 3.A1 | Write `vault/setup.sh` to automate Vault bootstrap steps | Script covers auth method, policy, role creation | Fresh cluster bootstrap repeatable from script |
+| 3.A2 | Document policy boundaries and what the Flask app cannot access | Least privilege — app should not read unrelated paths | Attempt to read forbidden path fails; documented in README or ADR |
+
+### Phase Completion Checklist
+
+- [ ] Vault running on cluster → **Expected:** `vault status` succeeds
+- [ ] Kubernetes auth configured → **Expected:** pod authenticates via ServiceAccount
+- [ ] Secret injected as file → **Expected:** no plaintext secret in Git or K8s Secret manifest
+- [ ] Flask app reads injected secret → **Expected:** app functions with Vault-sourced credential
+- [ ] Bootstrap script works → **Expected:** `vault/setup.sh` reproduces auth setup
 
 ---
 
 ## Phase 4 — Security: Kyverno, RBAC, and NetworkPolicy
 
 **Duration:** Weekend 7–8
-**Goal:** Enforce security standards at three layers — policy admission (Kyverno),
-identity and access (RBAC), and network (NetworkPolicy).
+**Goal:** Enforce security standards at three layers — policy admission (Kyverno), identity and access (RBAC), and network (NetworkPolicy).
 
-### Part A: Policy as Code with Kyverno
+### Practical Scenario
 
-**Core Concepts**
+The cluster accepts any workload configuration and any pod can talk to any other pod. Insecure images, missing limits, excessive permissions, and flat network trust are all allowed. You need defence in depth at admission, identity, and network layers.
 
-Kyverno is a Kubernetes-native policy engine that integrates with the admission
-webhook. It intercepts every resource creation and update request and either
-blocks it (enforce mode) or flags it (audit mode).
+### Core Concepts (condensed)
 
-**Types of Kyverno Policies**
-- **Validation** — blocks resources violating a rule. Example: block pods using `latest` tag
-- **Mutation** — modifies resources before storage. Example: auto-add a default resource limit
-- **Generation** — creates new resources when a trigger fires. Example: auto-create a
-  NetworkPolicy when a new Namespace is created
+**Kyverno**
+- Kubernetes-native policy engine at the admission webhook
+- Policy types: Validation (block), Mutation (modify), Generation (create resources on trigger)
+- Modes: audit (log violations) vs enforce (block violations)
+- PolicyReport shows cluster-wide compliance state
 
-**The Admission Webhook Flow**
-1. `kubectl apply` sends the resource to the K8s API server
-2. API server calls Kyverno's validating/mutating webhook
-3. Kyverno evaluates all policies against the resource
-4. Kyverno returns Allow or Deny
-5. If Deny, the apply fails with a clear policy violation message in the terminal
+**RBAC**
+- `Role` / `ClusterRole` — permissions; `RoleBinding` / `ClusterRoleBinding` — who gets them
+- Subjects: User, Group, ServiceAccount
+- Least privilege: workloads get only permissions they need
 
-**Policies to Write — All Five**
+**NetworkPolicy**
+- Restricts pod traffic by label and namespace selectors
+- Default-deny pattern: deny all, then add explicit allows
+- **CNI dependency:** Kindnet does not enforce policies — Calico or Cilium required
 
-Policy 1: Disallow Latest Tag — block any container using `image:latest`.
-Reason: latest is not reproducible and breaks GitOps traceability.
+### Tasks
 
-Policy 2: Require Resource Limits — block pods without CPU and memory limits.
-Reason: unbounded pods can starve other workloads on the same node.
+#### Beginner — Kyverno and RBAC foundations
 
-Policy 3: Disallow Privileged Containers — block containers running as privileged or root UID 0.
-Reason: privilege escalation is the most common container breakout vector.
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 4.B1 | Install Kyverno and write one validation policy in audit mode | Kyverno Helm chart; start non-blocking | PolicyReport shows violations without blocking deploys |
+| 4.B2 | Create a dedicated ServiceAccount for the Flask app | Not the `default` SA; reference in Helm chart | Deployment runs under named ServiceAccount |
 
-Policy 4: Require Standard Labels — require `app`, `env`, and `team` labels on all Deployments.
-Reason: without labels, cost allocation and incident response are impossible.
+#### Intermediate — Policy enforcement and RBAC
 
-Policy 5: Require NetworkPolicy — every namespace must have at least one NetworkPolicy.
-Reason: without this, any pod can reach any other pod across the cluster.
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 4.I1 | Write five Kyverno policies in `security/kyverno/policies/` | Disallow `latest` tag; require limits; disallow privileged; require labels; require NetworkPolicy | All five policies exist; chart updated to comply |
+| 4.I2 | Fix Flask Helm chart to pass all policies; switch to enforce mode | Run `kubectl get policyreport -A` in audit first | Non-compliant deploy blocked with clear error message |
+| 4.I3 | Define Role and RoleBinding with least privilege for the Flask app | `security/rbac/` manifests; ConfigMap read only if needed | `kubectl auth can-i` shows allowed and denied actions match intent |
 
-**What to Build**
+#### Advanced — Network isolation and generation policies
 
-1. Install Kyverno using its Helm chart
-2. Write all five policies in `security/kyverno/policies/`
-3. Start in audit mode — Kyverno logs violations but does not block
-4. Run `kubectl get policyreport -A` to see what your existing resources violate
-5. Fix your Flask app Helm chart to pass all five policies
-6. Switch to enforce mode
-7. Try deploying a bad pod (with `latest` tag) and capture the error message in your README
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 4.A1 | Recreate Kind cluster with Calico; implement default-deny NetworkPolicy | Kind + Calico docs; DNS egress to kube-system on UDP 53 | Policy objects applied; CNI actually enforces rules |
+| 4.A2 | Allow ingress only from ingress-controller; block cross-namespace access | Label selectors; test from `default` namespace | Ingress traffic works; unauthorized pod cannot reach Flask app |
+| 4.A3 | Write Kyverno Generate policy to auto-create default-deny NetworkPolicy on new namespaces | Generation policy type; namespace trigger | New namespace gets default-deny without manual step |
+| 4.A4 | Document RBAC model in `docs/decisions.md` | ADR format: context, decision, trade-offs | ADR explains why permissions were granted or withheld |
 
----
+### Phase Completion Checklist
 
-### Part B: Kubernetes RBAC
-
-**Core Concepts**
-
-RBAC (Role-Based Access Control) controls who can do what inside the cluster.
-It is one of the most commonly tested K8s topics in senior DevOps interviews.
-
-**The Four Objects — Know Them Deeply**
-
-`Role` — defines a set of permissions within a single namespace.
-Example: allow get and list on Pods in the `flask-app` namespace.
-
-`ClusterRole` — same as Role but applies across all namespaces or to
-cluster-scoped resources (like Nodes and PersistentVolumes).
-
-`RoleBinding` — binds a Role or ClusterRole to a Subject (User, Group, or
-ServiceAccount) within a specific namespace.
-
-`ClusterRoleBinding` — binds a ClusterRole to a Subject across the entire cluster.
-
-**The Principle of Least Privilege**
-Every workload should have only the permissions it actually needs. A Flask API
-that only reads from a database needs no Kubernetes API access at all. Its
-ServiceAccount should have zero RBAC permissions. This is the default when
-you create a ServiceAccount — no permissions unless you explicitly bind a Role.
-
-**What to Build**
-
-1. Create a dedicated ServiceAccount for the Flask app (not the `default` SA)
-2. Write `security/rbac/flask-app-role.yaml` — a Role in the `flask-app` namespace
-   that allows the app to `get` and `list` its own ConfigMaps only
-3. Write `security/rbac/flask-app-rolebinding.yaml` — bind the Role to the ServiceAccount
-4. Update the Helm chart to reference the dedicated ServiceAccount
-5. Test with `kubectl auth can-i get pods --as=system:serviceaccount:flask-app:flask-app-sa`
-   — it should return `no`
-6. Test with `kubectl auth can-i get configmaps --as=system:serviceaccount:flask-app:flask-app-sa`
-   — it should return `yes`
-7. Write an ADR in `docs/decisions.md` explaining your RBAC model
-
----
-
-### Part C: NetworkPolicy
-
-**Core Concepts**
-
-By default in Kubernetes, all pods can communicate with all other pods — across
-namespaces and across nodes. NetworkPolicy objects restrict this using label selectors
-and namespace selectors.
-
-**The Default Deny Pattern**
-The production pattern is to start with a default-deny-all NetworkPolicy in every
-namespace, then add explicit allow rules for only the traffic that is needed.
-
-```
-default-deny-all  →  allow ingress from ingress-controller  →  allow egress to database namespace
-```
-
-NetworkPolicies are enforced by the CNI plugin (not Kubernetes itself). Kind uses
-Kindnet by default which does not enforce NetworkPolicies. You need to switch to
-Calico or Cilium in your Kind config for this to actually work. Do it — it teaches
-you that NetworkPolicy is CNI-dependent, which is a real interview question.
-
-**What to Build**
-
-1. Recreate your Kind cluster with Calico as the CNI plugin
-2. Write a default-deny-all NetworkPolicy for the `flask-app` namespace
-3. Write an allow-ingress rule permitting traffic only from the ingress-controller namespace
-4. Write an allow-egress rule permitting DNS resolution (UDP port 53 to kube-system)
-5. Add a Kyverno policy that ensures every new Namespace has the default-deny NetworkPolicy
-   generated automatically (use Kyverno's Generate policy type)
-6. Test that a pod in the `default` namespace cannot reach the Flask app
-7. Test that a request through the ingress controller can reach the Flask app
-
-### Interview Scenario You Can Now Answer
-
-*"How do you enforce security standards across a multi-team Kubernetes cluster?"*
-
-Three layers. Policy admission via Kyverno — every resource is validated at the
-admission webhook before it is stored. If it violates a policy like using latest tags
-or missing resource limits, the deployment fails with a clear message. Identity via
-RBAC — every workload runs with a dedicated ServiceAccount with only the permissions
-it needs. We use `kubectl auth can-i` in our CI pipeline to validate permissions
-don't drift. Network via NetworkPolicy with Calico — default-deny in every namespace,
-with explicit allow rules for only the traffic flows we actually need. Kyverno
-auto-generates the default-deny policy for every new namespace so teams can't skip it.
+- [ ] Five Kyverno policies in enforce mode → **Expected:** bad pod with `latest` tag rejected
+- [ ] PolicyReport clean for platform workloads → **Expected:** Flask chart passes all policies
+- [ ] RBAC least privilege verified → **Expected:** `kubectl auth can-i` results documented
+- [ ] NetworkPolicy enforced with Calico → **Expected:** default-deny blocks; ingress allow works
+- [ ] Kyverno generates NetworkPolicy on new namespace → **Expected:** new namespace auto-protected
 
 ---
 
 ## Phase 5 — Security Scanning with Trivy in CI/CD
 
 **Duration:** Weekend 9
-**Goal:** Scan your Docker image for vulnerabilities in GitHub Actions and fail
-the build on critical issues.
+**Goal:** Scan your Docker image for vulnerabilities in GitHub Actions and fail the build on critical issues.
 
-### Core Concepts to Learn
+### Practical Scenario
 
-**What Trivy Scans**
-Trivy is a comprehensive vulnerability scanner covering:
-- OS packages inside the container (apt, rpm packages)
-- Language dependencies (Python pip, Node npm packages)
-- Kubernetes manifests for misconfigurations
-- Terraform files for misconfigurations
-- Secret detection in files and git history
+Vulnerable container images can be built and deployed without anyone noticing until runtime. Security checks must run before images reach the registry, with a clear policy on what blocks a merge.
 
-**Vulnerability Severity Levels**
-`CRITICAL → HIGH → MEDIUM → LOW → UNKNOWN`
+### Core Concepts (condensed)
 
-A production CI/CD pipeline fails on `CRITICAL` and `HIGH`. `MEDIUM` and below
-are tracked but not blocking. Configure this with `--severity CRITICAL,HIGH --exit-code 1`.
+- **Trivy scans:** OS packages, language deps, K8s manifests, IaC, secrets in files/git
+- **Severity:** CRITICAL → HIGH → MEDIUM → LOW → UNKNOWN
+- **CI gate:** fail on CRITICAL/HIGH with `--exit-code 1`
+- **SARIF:** upload results to GitHub Security tab for inline visibility
+- **`.trivyignore`:** documented exceptions with CVE ID, reason, review date
+- **Shift left:** scan on every PR, not after deployment
+- **GitOps CI/CD split:** CI updates image tag in Git; ArgoCD deploys — CI never runs `kubectl apply`
 
-**The `.trivyignore` File**
-Sometimes you cannot immediately update a dependency with a known CVE and need
-to accept the risk temporarily. The `.trivyignore` file lists CVE IDs to suppress
-with a comment explaining why and when it will be revisited. This shows maturity —
-you are documenting accepted risk, not silently ignoring security.
+### Tasks
 
-**Shift Left Security**
-Moving security checks earlier in the development lifecycle — from production audits
-to pre-merge CI. When Trivy runs on every PR, developers see vulnerabilities before
-they merge, not after deployment.
+#### Beginner — Local scanning
 
-### The GitHub Actions CI Pipeline to Build
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 5.B1 | Scan your Flask Docker image locally with Trivy | Trivy CLI docs; severity flags | Report lists vulnerabilities by severity |
+| 5.B2 | Compare scan results between an old and a hardened base image | Try an older Python base vs pinned minimal image | Documented before/after vulnerability count difference |
 
-```
-Workflow: ci.yaml
-Trigger: push to main, pull_request
+#### Intermediate — CI pipeline
 
-Job 1 — test
-  - checkout code
-  - set up Python
-  - run pytest
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 5.I1 | Build `.github/workflows/ci.yaml` that tests, builds, scans, and gates on severity | Job dependencies; pytest first; Trivy before push | PR with vulnerable image fails CI; clean image passes |
+| 5.I2 | Push passing images to ghcr.io tagged with git SHA | Never tag `latest`; use GitHub Container Registry | Image in registry with immutable SHA tag |
+| 5.I3 | Upload Trivy SARIF to GitHub Security tab | SARIF upload action docs | Findings visible in repo Security tab |
 
-Job 2 — build-and-scan  (needs: test)
-  - build Docker image
-  - run Trivy scan on the image
-  - upload Trivy SARIF report to GitHub Security tab
-  - fail the job if CRITICAL or HIGH found
+#### Advanced — Exceptions and GitOps trigger
 
-Job 3 — push-image  (needs: build-and-scan)
-  - login to GitHub Container Registry (ghcr.io)
-  - push image tagged with git SHA (never latest)
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 5.A1 | Create `.trivyignore` with one documented exception | CVE ID, business reason, review date in comment | Suppressed CVE no longer fails build; justification recorded |
+| 5.A2 | Add GitOps trigger job that updates image tag in Helm values on success | Separate workflow or final CI job; commit back to Git | Image tag change in Git triggers ArgoCD sync |
 
-Job 4 — update-gitops  (needs: push-image)
-  - checkout repo
-  - update the image tag in helm/flask-app/values.yaml
-  - commit and push
-  - ArgoCD detects the change and deploys
-```
+### Phase Completion Checklist
 
-Job 4 is the GitOps trigger. CI does not run `kubectl apply`. It updates
-a file in Git and lets ArgoCD take over. This is the clean separation of
-CI and CD in a GitOps model.
-
-### What to Build
-
-1. Create `.github/workflows/ci.yaml` with all four jobs
-2. Set up GitHub Container Registry (ghcr.io) — it is free and built in
-3. Add Trivy SARIF output and upload it to GitHub Security tab
-4. Create a `.trivyignore` with one suppressed CVE, a reason, and a review date
-5. Deliberately use an old base image (`python:3.9`) and see real vulnerabilities
-6. Update to `python:3.12-alpine` — see the vulnerability count drop significantly
-7. Document the before/after vulnerability counts in your README
-
-### Interview Scenario You Can Now Answer
-
-*"How do you handle container security in your CI/CD pipeline?"*
-
-We run Trivy in GitHub Actions on every PR. It scans the Docker image before it
-is pushed to the registry — we fail on CRITICAL and HIGH. The SARIF report uploads
-to GitHub's Security tab so developers see findings inline with their code. For
-accepted risks we can't immediately fix, we use a `.trivyignore` file with the CVE ID,
-business justification, and a review date — a documented exception, not silent
-suppression. We also scan Helm charts and Terraform with Trivy for misconfigurations
-in the same pipeline.
+- [ ] CI runs on push and PR → **Expected:** green pipeline for clean build
+- [ ] CRITICAL/HIGH vulnerabilities block merge → **Expected:** deliberate bad image fails CI
+- [ ] SARIF visible in Security tab → **Expected:** scan results browsable in GitHub UI
+- [ ] Image tagged with git SHA in ghcr.io → **Expected:** no `latest` tag in registry
+- [ ] GitOps image update triggers deploy → **Expected:** ArgoCD syncs new tag from Git change
 
 ---
 
 ## Phase 6 — Distributed Tracing with OpenTelemetry and Grafana Tempo
 
 **Duration:** Weekend 10–11
-**Goal:** Add the third pillar of observability — tracing. Follow a single request
-from the HTTP call through the Flask app to the database and see exactly where
-time is spent.
+**Goal:** Add the third pillar of observability — tracing. Follow a single request through the Flask app and see exactly where time is spent.
 
-### Core Concepts to Learn
+### Practical Scenario
 
-**The Three Pillars of Observability**
-- **Metrics** — aggregated numbers over time. "How many requests per second?"
-  You have this with Prometheus.
-- **Logs** — discrete events with context. "What happened at 14:32:05?"
-  You have this with Loki and Fluentbit.
-- **Traces** — the journey of a single request through multiple services.
-  "Why is this specific user's request slow?" This is what you are adding.
+Prometheus shows a latency spike but cannot explain which part of a specific request was slow. You need distributed traces correlated with your existing metrics and logs.
 
-Without traces, when a request is slow, you see a spike in your Prometheus
-latency metric but cannot tell which service caused it. With traces, you see
-the exact breakdown: 5ms in the API gateway, 200ms in the auth service, 800ms
-waiting for a database query. This is how product companies do incident root cause
-analysis.
+### Core Concepts (condensed)
 
-**OpenTelemetry — What It Is**
-OpenTelemetry (OTel) is the CNCF standard for instrumentation. It is vendor-neutral —
-you instrument your code once and can send the data to any backend (Tempo, Jaeger,
-Datadog, Honeycomb). It has three components:
+- **Three pillars:** metrics (aggregated), logs (discrete events), traces (single request journey)
+- **OpenTelemetry:** vendor-neutral instrumentation standard (SDK, Collector, OTLP protocol)
+- **Collector pattern:** app → Collector → backend; decouples app from observability vendor
+- **Grafana Tempo:** trace backend; integrates with Grafana for correlated observability
+- **Trace anatomy:** trace (full journey), span (unit of work), context propagation (`traceparent` header)
+- **Sampling:** head-based vs tail-based — you do not trace 100% of requests in production
+- **traceToLogs:** jump from span to related Loki log lines in Grafana
 
-- **SDK** — the library you add to your application code to generate telemetry
-- **Collector** — a standalone service that receives, processes, and exports telemetry.
-  The collector is the hub — your app sends to the collector, the collector sends
-  to the backend. This decouples your app from the observability backend.
-- **Protocol (OTLP)** — the wire format used to transmit traces, metrics, and logs
+### Tasks
 
-**Grafana Tempo — The Tracing Backend**
-Tempo is Grafana's distributed tracing backend. It integrates natively with Grafana,
-which means your traces appear in the same UI as your Prometheus metrics and Loki logs.
-This is the key: you can click on a spike in a Grafana metric panel, jump directly to
-the traces from that time window, click on a trace, and see the exact log lines from
-that span. This is called **correlated observability** and it is what product company
-SRE interviews ask about.
+#### Beginner — Application instrumentation
 
-**Trace Anatomy — Know These Terms**
-- **Trace** — the complete journey of one request, represented as a tree of spans
-- **Span** — a single unit of work within a trace (e.g., "handle HTTP request",
-  "query database", "call external API"). Has a start time, duration, and attributes.
-- **Context Propagation** — how trace context (trace ID and span ID) is passed between
-  services via HTTP headers (W3C Trace Context standard: `traceparent` header)
-- **Sampling** — you do not trace 100% of requests in production. Head-based sampling
-  decides at the start whether to trace a request. Tail-based sampling decides after
-  the request completes based on whether it was slow or errored.
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 6.B1 | Instrument Flask app with OpenTelemetry SDK | Python OTel getting started; Flask auto-instrumentation package; OTLP exporter | Spans generated for HTTP requests |
+| 6.B2 | Confirm traces reach an OpenTelemetry Collector endpoint | Collector receiver on OTLP gRPC port; check collector logs | Collector receives spans from the app |
 
-### What to Build
+#### Intermediate — Collector and Tempo
 
-**Step 1: Instrument the Flask App with OpenTelemetry SDK**
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 6.I1 | Deploy OTel Collector with receiver, batch processor, and Tempo exporter | Config in `observability/otel/`; Deployment and Service manifests | Collector forwards spans to Tempo |
+| 6.I2 | Install Grafana Tempo and connect as Grafana datasource | Helm values in `observability/tempo/` | Traces searchable in Grafana Explore |
 
-Add these packages to `requirements.txt`:
-```
-opentelemetry-sdk
-opentelemetry-api
-opentelemetry-instrumentation-flask
-opentelemetry-exporter-otlp
-```
+#### Advanced — Correlated observability
 
-The `opentelemetry-instrumentation-flask` package auto-instruments Flask — it creates
-a span for every HTTP request automatically without you manually adding trace code.
-You only need a few lines of initialisation in `main.py`:
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 6.A1 | Configure traceToLogs on Tempo datasource | Grafana datasource config in `observability/grafana/datasources/` | Clicking span jumps to related log lines |
+| 6.A2 | Build traces dashboard linking metrics panels to Tempo search | Dashboard in `observability/grafana/dashboards/` | Dashboard shows rate, latency percentiles, trace drill-down |
+| 6.A3 | Generate traffic and observe span breakdown for slow requests | Traffic script in `automation/`; search traces in Explore | Slow trace shows identifiable span causing delay |
 
-```python
-from opentelemetry import trace
-from opentelemetry.sdk.trace import TracerProvider
-from opentelemetry.exporter.otlp.proto.grpc.trace_exporter import OTLPSpanExporter
-from opentelemetry.instrumentation.flask import FlaskInstrumentor
+### Phase Completion Checklist
 
-provider = TracerProvider()
-exporter = OTLPSpanExporter(endpoint="http://otel-collector:4317")
-provider.add_span_processor(BatchSpanProcessor(exporter))
-trace.set_tracer_provider(provider)
-FlaskInstrumentor().instrument_app(app)
-```
-
-This sends traces to the OTel Collector on port 4317.
-
-**Step 2: Deploy the OpenTelemetry Collector**
-
-Write `observability/otel/collector-config.yaml` with:
-- Receiver: `otlp` (receives from your Flask app)
-- Processor: `batch` (batches spans for efficiency)
-- Exporter: `otlp/tempo` (forwards to Grafana Tempo)
-
-Write `observability/otel/otel-collector-deploy.yaml` with the Deployment and Service
-for the collector in your cluster.
-
-**Step 3: Deploy Grafana Tempo**
-
-Install Tempo using its Helm chart with `observability/tempo/tempo-values.yaml`.
-Tempo is a single binary in monolithic mode — it is simple to run locally.
-
-**Step 4: Connect Tempo to Grafana**
-
-Add a Tempo datasource to Grafana in `observability/grafana/datasources/tempo.yaml`.
-Also configure `traceToLogs` in the Tempo datasource so clicking a span in a trace
-automatically jumps to the corresponding Loki log lines. This is the correlated
-observability feature.
-
-**Step 5: Create a Traces Dashboard**
-
-Build a Grafana dashboard that shows:
-- Request rate and error rate (from Prometheus)
-- p95 and p99 latency (from Prometheus)
-- A link panel that opens Tempo trace search filtered to the last time window
-
-**Step 6: Generate and Observe Traces**
-
-Write a simple Python script `automation/generate_traffic.py` that sends
-100 requests to your Flask app. Then open Grafana → Explore → Tempo and search
-for traces. Click on a slow trace and observe the span breakdown.
-
-### Interview Scenario You Can Now Answer
-
-*"You said you have Prometheus and Grafana. How do you handle distributed tracing?
-What happens when a request is slow but your metrics don't tell you why?"*
-
-We use OpenTelemetry for instrumentation — vendor-neutral, so we can switch backends
-without touching application code. The OTel Collector receives spans from all services
-and forwards to Grafana Tempo. In Grafana, I can see a latency spike in the Prometheus
-panel, click the time range, jump directly to Tempo traces from that window, click the
-slowest trace, and see which span caused it — down to the exact database query or
-external API call. The Tempo datasource also has `traceToLogs` configured so I can
-jump from a span directly to the Loki log lines from that exact request. That is the
-full three-pillar observability stack — metrics, logs, and traces all correlated.
+- [ ] Flask app emits OTLP traces → **Expected:** Collector logs show incoming spans
+- [ ] Tempo stores and serves traces → **Expected:** traces visible in Grafana Explore
+- [ ] traceToLogs configured → **Expected:** span-to-log navigation works
+- [ ] Traces dashboard built → **Expected:** metrics and traces linked in one view
+- [ ] Traffic generation produces observable traces → **Expected:** 100+ requests yield searchable trace data
 
 ---
 
 ## Phase 7 — SRE Concepts: SLI, SLO, and Error Budget Dashboard
 
 **Duration:** Weekend 12
-**Goal:** Define formal SLOs for your Flask app, implement them as Prometheus recording
-rules, and build a Grafana SLO dashboard that shows error budget burn rate.
+**Goal:** Define formal SLOs for your Flask app, implement them as Prometheus recording rules, and build a Grafana SLO dashboard that shows error budget burn rate.
 
-### Core Concepts to Learn
+### Practical Scenario
 
-**Why This Is The Biggest Interview Gap**
-When your CV says "99.9% availability" and an interviewer asks "how did you define
-and measure that, and what happened when you breached the error budget" — you need
-a specific, structured answer. Vague availability claims are red flags at senior level.
-Formal SLO thinking is what distinguishes SRE-aware engineers from traditional DevOps.
+Availability and latency are discussed informally but not measured. Without formal SLIs, SLOs, and error budgets you cannot tell when reliability is degrading fast enough to act, or when to pause feature work.
 
-**SLI — Service Level Indicator**
-The actual metric you measure. Must be something directly observable from your
-monitoring stack. Good SLIs are ratio-based and measure from the user's perspective.
+### Core Concepts (condensed)
 
-Examples for your Flask app:
-- Availability SLI: proportion of HTTP requests returning 2xx status codes
-- Latency SLI: proportion of HTTP requests completing in under 300ms
-- Error rate SLI: proportion of requests not returning 5xx status codes
+- **SLI:** observable metric measuring user-facing behaviour (ratio-based is best)
+- **SLO:** target for an SLI over a rolling window (e.g. 99.9% availability over 30 days)
+- **Error budget:** allowed unreliability = 1 − SLO; when exhausted, prioritise reliability over features
+- **Burn rate:** speed of budget consumption; multi-window alerts catch fast and slow burns
+- **Recording rules:** pre-compute expensive PromQL; naming conventions from OpenSLO/Sloth
+- **Example SLIs for Flask:** 2xx ratio (availability), sub-300ms ratio (latency), non-5xx ratio (errors)
+- **Alert tiers:** critical burn (e.g. >14 over 1h), warning burn (e.g. >6 over 6h)
 
-**SLO — Service Level Objective**
-The target you commit to for your SLI over a rolling time window.
-Example: 99.9% of HTTP requests return 2xx over a rolling 30-day window.
+### Tasks
 
-99.9% over 30 days = 99.9% × 30 × 24 × 60 = 43,156 minutes of allowed downtime.
-That is 43.2 minutes of allowed failures per 30 days.
+#### Beginner — Metrics and SLIs
 
-**Error Budget**
-The amount of unreliability you are allowed before you must freeze new deployments
-and focus on reliability work.
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 7.B1 | Expose Prometheus metrics from Flask app | `prometheus-flask-exporter` or equivalent; `/metrics` endpoint | Prometheus scrapes request counters and latency histograms |
+| 7.B2 | Define and query SLIs in PromQL for availability and latency | Ratio of good events to total events | PromQL queries return sensible values under load |
 
-Error budget = 1 - SLO target = 0.1% of requests over 30 days can fail.
-When the error budget is consumed, you stop shipping features until the budget recovers.
-This is the mechanism that aligns development velocity with reliability.
+#### Intermediate — SLO implementation
 
-**Error Budget Burn Rate**
-How fast you are consuming your error budget. A burn rate of 1 means you will
-exactly consume the budget by the end of the window. A burn rate of 14 means you
-will consume the entire 30-day budget in about 2 days — that is a critical alert.
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 7.I1 | Write recording rules for availability and error budget remaining | Rules in `observability/prometheus/recording-rules.yaml` | New metrics appear in Prometheus for SLO calculations |
+| 7.I2 | Build Grafana SLO dashboard with compliance, budget, and burn rate panels | Dashboard in `observability/grafana/dashboards/slo-dashboard.json` | Dashboard shows SLO status, budget remaining, burn rate over time |
 
-Google's SRE book recommends alerting at:
-- Burn rate > 14 (1-hour window) — page immediately, budget gone in 2 days
-- Burn rate > 6 (6-hour window) — ticket, budget gone in 5 days
+#### Advanced — Alerting and breach simulation
 
-**Prometheus Recording Rules for SLOs**
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 7.A1 | Write multi-window burn rate alert rules | Google SRE workbook alerting guidance | Alerts fire at configured burn thresholds |
+| 7.A2 | Simulate high error rate and observe budget consumption in real time | Reuse traffic generation; inject errors | Burn rate spikes on dashboard; alerts trigger or enter pending |
 
-Recording rules pre-compute expensive queries and store them as new metrics.
-SLO recording rules follow a naming convention standardised by the OpenSLO
-and Sloth projects.
+### Phase Completion Checklist
 
-Write `observability/prometheus/recording-rules.yaml` with:
-
-```yaml
-# 5-minute window availability
-- record: flask_app:availability:ratio_rate5m
-  expr: |
-    sum(rate(flask_http_requests_total{status=~"2.."}[5m]))
-    /
-    sum(rate(flask_http_requests_total[5m]))
-
-# 30-day window availability (used for SLO compliance)
-- record: flask_app:availability:ratio_rate30d
-  expr: |
-    sum(rate(flask_http_requests_total{status=~"2.."}[30d]))
-    /
-    sum(rate(flask_http_requests_total[30d]))
-
-# Error budget remaining (percentage)
-- record: flask_app:error_budget_remaining
-  expr: |
-    1 - (
-      (1 - flask_app:availability:ratio_rate30d)
-      /
-      (1 - 0.999)
-    )
-```
-
-**Grafana SLO Dashboard — Panels to Build**
-
-Build `observability/grafana/dashboards/slo-dashboard.json` with these panels:
-
-Panel 1 — Current SLO Compliance: Single stat showing 30-day availability as a percentage.
-Red below 99.9%, yellow between 99.9% and 99.95%, green above.
-
-Panel 2 — Error Budget Remaining: Gauge panel showing percentage of error budget
-left for the current 30-day window. Red below 25%, yellow between 25% and 50%.
-
-Panel 3 — Error Budget Burn Rate: Time series showing burn rate over the last 72 hours.
-Horizontal reference lines at burn rate 14 (critical) and 6 (warning).
-
-Panel 4 — Request Rate: Time series of total requests per second.
-
-Panel 5 — Error Rate: Time series of 5xx responses as a percentage of total.
-
-Panel 6 — Latency Percentiles: Time series of p50, p95, p99 request latency.
-
-**Alerting Rules to Write**
-
-Write two Prometheus alert rules:
-- Page alert: `ErrorBudgetBurnRateCritical` — fires when burn rate > 14 over 1 hour
-- Ticket alert: `ErrorBudgetBurnRateHigh` — fires when burn rate > 6 over 6 hours
-
-### What to Build
-
-1. Add Prometheus Flask instrumentation to the Flask app (`prometheus-flask-exporter`)
-2. Expose a `/metrics` endpoint that Prometheus scrapes
-3. Write the three recording rules above
-4. Write the two alert rules above
-5. Build the six-panel SLO dashboard in Grafana
-6. Use your traffic generation script to simulate a high error rate
-7. Watch the error budget burn rate spike in real time on the dashboard
-8. Screenshot the dashboard for your README
-
-### Interview Scenario You Can Now Answer
-
-*"You mentioned 99.9% availability. How did you define and measure that? What did
-you do when you were at risk of breaching it?"*
-
-We defined formal SLOs rather than vague availability claims. Our availability SLI
-is the ratio of 2xx responses to total requests over a rolling 30-day window.
-The SLO target is 99.9%, which gives us 43 minutes of error budget per month.
-We implemented this using Prometheus recording rules and built a Grafana dashboard
-showing real-time error budget consumption and burn rate. When burn rate exceeds 14
-over a 1-hour window — meaning we'll consume the entire 30-day budget in 2 days —
-we get paged. When it exceeds 6 over 6 hours, we get a ticket. When the budget is
-below 25%, we freeze feature deployments and focus on reliability work until it recovers.
+- [ ] `/metrics` scraped by Prometheus → **Expected:** `flask_http_requests_total` visible
+- [ ] Recording rules compute SLO metrics → **Expected:** availability and budget metrics queryable
+- [ ] SLO dashboard complete → **Expected:** six panels covering compliance, budget, burn rate, rate, errors, latency
+- [ ] Burn rate alerts configured → **Expected:** critical and warning thresholds defined
+- [ ] Simulated breach observable → **Expected:** dashboard shows budget consumption under load
 
 ---
 
@@ -1048,69 +568,49 @@ below 25%, we freeze feature deployments and focus on reliability work until it 
 
 **Duration:** Weekend 13
 **Goal:** Add namespace-level and workload-level cost visibility to your cluster.
-Demonstrate that you think about cost at the platform level, not just the AWS console level.
 
-### Core Concepts to Learn
+### Practical Scenario
 
-**Why Kubecost Matters**
-Your CV mentions a 30% cost reduction at the infrastructure level — EC2 rightsizing,
-reserved instances, eliminating idle resources. That is good. But product companies
-running EKS also want cost visibility at a finer grain:
+Cluster cost is a black box. You cannot see which namespace or deployment is over-provisioned, how much the monitoring stack costs versus the app, or whether dev environments are wasteful.
 
-- Which team's namespace is consuming the most cost?
-- Which specific deployment is over-provisioned?
-- What is the cost of running the monitoring stack vs the application?
-- Is the dev environment costing more than it should?
+### Core Concepts (condensed)
 
-Kubecost answers these questions by combining K8s resource usage metrics with cloud
-pricing data to produce per-namespace, per-deployment, per-label cost estimates.
+- **Kubecost:** combines K8s resource requests/usage with pricing data for cost estimates
+- **Cost allocation:** distribute cost by namespace, label, deployment, team
+- **Efficiency score:** actual usage ÷ requested resources — low score means over-provisioning
+- **Shared cost:** allocate monitoring, ingress, and platform overhead across consumers
+- **Idle cost:** resources provisioned but unused
 
-**How Kubecost Works**
-Kubecost runs as a pod in your cluster. It reads resource requests and limits
-from the Kubernetes API, tracks actual usage via Prometheus metrics, and applies
-cloud pricing (or configurable on-prem pricing) to calculate cost estimates.
+### Tasks
 
-Key concepts:
-- **Cost allocation** — distributing cluster cost to namespaces, labels, and teams
-- **Efficiency score** — ratio of resource usage to resource requests. A pod requesting
-  1 CPU but using 0.1 CPU has 10% efficiency — it is over-provisioned by 10x
-- **Shared cost** — how to allocate the cost of shared infrastructure like the
-  monitoring stack or ingress controller across teams
-- **Idle cost** — the cost of resources provisioned but never used
+#### Beginner — Kubecost setup
 
-**The Efficiency Score in Interviews**
-When you can say "I implemented cost visibility that showed team A's namespace had
-40% CPU efficiency — meaning they were over-provisioning by 2.5x — and we worked
-with them to right-size their resource requests, reducing their namespace cost by 30%"
-— that is a complete, credible cost optimisation story.
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 8.B1 | Install Kubecost via Helm with values in `kubecost/` | Kubecost install docs; port-forward to UI | Kubecost UI loads and shows cluster cost data |
+| 8.B2 | Navigate cost allocation by namespace | Cost allocation view in UI | Per-namespace cost breakdown visible |
 
-### What to Build
+#### Intermediate — Analysis and documentation
 
-1. Install Kubecost using its Helm chart with `kubecost/kubecost-values.yaml`
-2. Port-forward the Kubecost UI and explore the cost allocation view by namespace
-3. Take a screenshot of the cost breakdown between `flask-app`, `monitoring`,
-   `argocd`, and `vault` namespaces — add it to your README
-4. Note the efficiency score for each namespace (your monitoring stack will likely
-   be over-provisioned — this is realistic)
-5. Write `kubecost/README.md` explaining:
-   - What cost allocation model you used
-   - What the efficiency scores revealed
-   - What resource request changes you would make based on the data
-6. Write one Prometheus alert: `NamespaceCostThresholdBreached` — fires when a
-   namespace cost exceeds a configurable daily threshold
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 8.I1 | Document cost split across platform namespaces | Compare `flask-app`, `monitoring`, `argocd`, `vault` | Screenshot and written summary in README or `kubecost/README.md` |
+| 8.I2 | Record efficiency scores and identify over-provisioned workloads | Efficiency panel; compare requests vs actual usage | At least one namespace flagged as over-provisioned with explanation |
 
-### Interview Scenario You Can Now Answer
+#### Advanced — Actionable cost controls
 
-*"Beyond AWS cost optimisation, how do you manage costs at the Kubernetes level?"*
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 8.A1 | Write `kubecost/README.md` with allocation model, findings, and right-sizing recommendations | What you would change and why | Document ties data to concrete resource request changes |
+| 8.A2 | Create Prometheus alert for namespace daily cost threshold breach | `NamespaceCostThresholdBreached` or equivalent | Alert fires when configured namespace exceeds daily cost limit |
 
-At the K8s level we use Kubecost for namespace and workload-level cost visibility.
-It combines resource request and actual usage data with cloud pricing to show cost
-per namespace, per deployment, and per team label. The key metric is efficiency score —
-the ratio of actual usage to requested resources. A score of 20% means you are
-paying for 5x more than you use. We run monthly efficiency reviews and work with
-teams to right-size their resource requests. We also alert when any namespace cost
-exceeds a daily threshold, which catches runaway dev workloads before they become
-a large bill.
+### Phase Completion Checklist
+
+- [ ] Kubecost installed and accessible → **Expected:** UI shows live cost data
+- [ ] Namespace cost breakdown documented → **Expected:** screenshot in README or kubecost README
+- [ ] Efficiency analysis complete → **Expected:** over-provisioned workload identified with score
+- [ ] Right-sizing recommendations written → **Expected:** concrete request/limit changes proposed
+- [ ] Cost threshold alert configured → **Expected:** alert rule exists and is testable
 
 ---
 
@@ -1119,207 +619,105 @@ a large bill.
 **Duration:** Weekend 14–15
 **Goal:** Write three practical Python scripts using AWS and Kubernetes APIs.
 
-### The Right Mindset
+### Practical Scenario
 
-You are not trying to become a Python developer. You are demonstrating that you can
-write automation using AWS APIs (`boto3`) and Kubernetes APIs (`kubernetes` Python
-client) — the two libraries that distinguish DevOps Python from general Python.
+Health checks, cost reports, and log analysis are done manually. Operational tasks should be automatable scripts you can run on demand or schedule.
 
----
+### Core Concepts (condensed)
 
-### Script 1: `k8s_health_check.py`
+- **kubernetes Python client:** load kubeconfig; `CoreV1Api` for pod listing; check phase and conditions
+- **boto3:** AWS SDK; client vs resource; Cost Explorer `get_cost_and_usage()`
+- **Script structure:** functions over procedural code; `argparse` for CLI flags
+- **Credentials:** environment variables or instance profile — never hardcode
+- **Libraries enough for DevOps automation:** functions, dicts, `os`, `re`, `datetime` — no need for advanced Python patterns
 
-Connects to your cluster, checks all pods across namespaces, reports pods not in
-Running state, and sends a Slack alert if unhealthy pods are found.
+### Tasks
 
-**Concepts to learn:**
-- The `kubernetes` Python client and how to load kubeconfig with `config.load_kube_config()`
-- Listing pods with `CoreV1Api().list_pod_for_all_namespaces()`
-- Pod phase and container status conditions
-- Structuring a Python script with functions, not just procedural code
-- `argparse` for command-line arguments like `--namespace` and `--alert-slack`
+#### Beginner — Cluster health
 
-**Script structure:**
-```
-load_kube_config()
-get_all_pods(namespace=None)
-check_pod_health(pod)
-format_report(unhealthy_pods)
-send_slack_alert(webhook_url, message)
-main()
-```
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 9.B1 | Write `automation/k8s_health_check.py` that reports unhealthy pods | `kubernetes` client; `list_pod_for_all_namespaces`; pod phase checks | Script prints pods not in Running state; `--namespace` filter works |
 
----
+#### Intermediate — Cost reporting
 
-### Script 2: `aws_cost_report.py`
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 9.I1 | Write `automation/aws_cost_report.py` for last 30 days by service | `boto3` Cost Explorer API; tabulate or formatted output | Report shows per-service cost breakdown |
+| 9.I2 | Add optional Slack notification to health check script | `requests` or webhook; `--alert-slack` flag | Unhealthy pods trigger webhook message when configured |
 
-Uses `boto3` to pull AWS Cost Explorer data for the last 30 days, breaks it
-down by service, and outputs a formatted report. Optionally sends to Slack.
+#### Advanced — Log analysis and packaging
 
-**Concepts to learn:**
-- `boto3` client vs resource — the difference and when to use each
-- AWS Cost Explorer API — `get_cost_and_usage()`
-- Handling AWS credentials safely — environment variables or instance profile, never hardcoded
-- JSON response parsing from AWS APIs
-- Formatting tabular output with `tabulate` or f-strings
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 9.A1 | Write `automation/log_parser.py` that alerts on ERROR/CRITICAL threshold in last N minutes | `re` for timestamps and log levels; `os.environ` for config | Alert fires when error count exceeds threshold |
+| 9.A2 | Package all scripts with `requirements.txt` and usage examples | One requirements file covering all scripts; document in README | Scripts run in clean venv with documented CLI examples |
 
-This script is directly relatable to your 30% cost reduction achievement.
-In interviews you can say you built tooling to track and report cost — not
-just manually checked the console.
+### Phase Completion Checklist
 
----
-
-### Script 3: `log_parser.py`
-
-Reads a log file (simulating application logs), finds ERROR and CRITICAL lines
-in the last N minutes, counts them, and sends a Slack alert if count exceeds a threshold.
-
-**Concepts to learn:**
-- File I/O and reading large files efficiently
-- `datetime` parsing from log timestamps
-- `re` module — two patterns: timestamp extraction and log level detection
-- Environment variables with `os.environ` for webhook URLs and thresholds
-- Writing a `requirements.txt` properly
-
-This script directly supports your "reduced MTTR by 30%" CV bullet — you can
-say you automated log analysis instead of manually grepping log files.
-
----
-
-### Python Learning Path
-
-If you need to build confidence first, do this in order over 3 weeks:
-
-**Week 1 — Basics refresher:**
-Variables, functions, loops, conditionals, lists, dictionaries, file reading.
-Resource: Python.org official tutorial — chapters 3, 4, 5, 7 only.
-
-**Week 2 — DevOps libraries:**
-- `boto3` — write one script that lists your S3 buckets
-- `requests` — write one script that calls the GitHub API and prints repo names
-- `os` and `subprocess` — run shell commands from Python
-- `argparse` — add command-line arguments to an existing script
-
-**Week 3:** Write the three scripts above.
-
-You do not need decorators, classes, async, generators, or advanced Python.
-Functions, dictionaries, and libraries are enough.
+- [ ] `k8s_health_check.py` works against Kind cluster → **Expected:** correct report of pod health
+- [ ] `aws_cost_report.py` returns cost data → **Expected:** 30-day breakdown by service
+- [ ] `log_parser.py` detects threshold breach → **Expected:** alert on synthetic error log file
+- [ ] All scripts have CLI arguments → **Expected:** `argparse` help text documents flags
+- [ ] `requirements.txt` and usage docs complete → **Expected:** scripts run from clean environment
 
 ---
 
 ## Phase 10 — README and Documentation
 
 **Duration:** Weekend 16
-**Goal:** Write a README that makes the project immediately understandable to
-a hiring manager or senior engineer in under 5 minutes.
+**Goal:** Document the platform so future-you (or anyone reproducing your setup) can understand and run it without guessing.
 
-### Why This Phase Is Not Optional
+### Practical Scenario
 
-The README is what an interviewer reads before your interview. A great README
-signals engineering maturity more than any individual tool. It shows you think
-about communication and collaboration, not just implementation.
+You have built ten layers of infrastructure but the knowledge lives only in your head. Without clear documentation the platform cannot be reproduced, extended, or explained to others.
 
-### README Structure
+### Core Concepts (condensed)
 
-```markdown
-# Cloud-Native GitOps Platform
+- **README:** architecture diagram, stack table, getting started, per-area explanations
+- **ADRs (`docs/decisions.md`):** context, decision, reasons, trade-offs for major tool choices
+- **Reproducibility:** every command in getting started must actually work on a fresh Kind cluster
+- **Evidence:** screenshots and test output for security, observability, and cost features
 
-One sentence: what this project demonstrates and why.
+### Tasks
 
-## Architecture Diagram
-Mermaid or ASCII diagram showing:
-GitHub → GitHub Actions → ghcr.io
-→ ArgoCD → K8s Namespaces (dev, prod)
-→ Vault sidecar → Flask App
-→ OTel Collector → Tempo → Grafana
-→ Prometheus → Grafana (SLO Dashboard)
-Kyverno intercepting all admission requests
+| ID | Problem | Hints | Expected Outcome |
+|----|---------|-------|------------------|
+| 10.1 | Write README with architecture diagram and stack table | Mermaid or ASCII; link to each platform area | Reader understands full system in under 5 minutes |
+| 10.2 | Document getting started with working commands | Test every command on fresh setup | New clone can reach running app following README alone |
+| 10.3 | Write minimum five ADRs for major tool choices | ArgoCD vs Flux, Kyverno vs OPA, Vault vs alternatives, Tempo vs Jaeger, Kubecost approach | `docs/decisions.md` has 5+ ADRs with trade-offs |
+| 10.4 | Add evidence from each phase to README | Screenshots: Trivy, Kyverno violation, traces, SLO dashboard, Kubecost | README proves each layer works, not just exists |
 
-## Stack
-| Tool | Version | Purpose |
-|------|---------|---------|
-| ArgoCD | 2.x | GitOps controller |
-| HashiCorp Vault | 1.x | Secrets management |
-| Kyverno | 1.x | Policy enforcement |
-| Trivy | 0.x | Security scanning |
-| OpenTelemetry | 0.x | Distributed tracing |
-| Grafana Tempo | 2.x | Trace backend |
-| Prometheus | 2.x | Metrics + SLO recording rules |
-| Grafana | 10.x | Dashboards + SLO dashboard |
-| Kubecost | 1.x | K8s cost visibility |
+### Phase Completion Checklist
 
-## Getting Started
-Step-by-step local setup. Every command must actually work. Test it.
-
-## GitOps Workflow
-What happens when you push a code change — step by step.
-
-## Observability
-Three pillars: metrics (Prometheus), logs (Loki), traces (Tempo).
-SLO dashboard and error budget burn rate explained.
-
-## Security
-Vault secrets injection, Kyverno policies enforced, Trivy CI scanning,
-RBAC model, NetworkPolicy design.
-
-## Cost Visibility
-Kubecost setup, efficiency scores, how to read the cost allocation view.
-
-## Python Automation
-Description and usage example for each of the three scripts.
-
-## Decisions
-Link to docs/decisions.md
-```
-
-### The `decisions.md` File — Architecture Decision Records
-
-Write one ADR for each major tool choice. Example:
-
-```markdown
-## ADR-002: OpenTelemetry over Direct Jaeger SDK
-
-**Decision:** Use OpenTelemetry SDK for instrumentation
-
-**Context:** Needed distributed tracing. Options were direct Jaeger client,
-direct Zipkin client, or the vendor-neutral OpenTelemetry SDK.
-
-**Reasons:**
-- OTel is CNCF standard — vendor lock-in is eliminated
-- Switching backends (Tempo → Honeycomb → Datadog) requires zero code changes
-- Auto-instrumentation for Flask means minimal application code change
-- Active community, adopted by all major observability vendors
-
-**Trade-offs:**
-- OTel Collector adds an extra infrastructure component to manage
-- Slightly more initial setup compared to direct SDK integration
-```
-
-Write ADRs for: ArgoCD vs Flux, Kyverno vs OPA, Vault vs AWS Secrets Manager,
-Tempo vs Jaeger, Kubecost vs manual dashboards. Five ADRs minimum.
+- [ ] Architecture diagram in README → **Expected:** full data flow from Git to cluster to observability
+- [ ] Getting started reproducible → **Expected:** tested end-to-end on clean environment
+- [ ] Five ADRs written → **Expected:** each covers context, decision, and trade-offs
+- [ ] Phase evidence documented → **Expected:** screenshots or test output for security, observability, cost
+- [ ] All prior phase checklists complete → **Expected:** every phase checklist ticked before calling project done
 
 ---
 
 ## Complete Week-by-Week Schedule
 
-| Weekend | Phase | Deliverable |
-|---------|-------|-------------|
-| 1 | Phase 1 — Part A | Kind cluster running, Flask app built and containerised |
-| 2 | Phase 1 — Part B | Helm chart deployed, probes and limits working |
-| 3 | Phase 2 — Part A | ArgoCD installed, first app syncing from Git |
-| 4 | Phase 2 — Part B | App of Apps, dev/prod environments, selfHeal tested |
-| 5 | Phase 3 — Part A | Vault installed, auth method configured, policy written |
-| 6 | Phase 3 — Part B | Vault Agent injecting secrets, app reading from file |
-| 7 | Phase 4 — Part A | Five Kyverno policies in enforce mode |
-| 8 | Phase 4 — Part B | RBAC manifests done, NetworkPolicy with Calico working |
-| 9 | Phase 5 | Full GitHub Actions CI pipeline, Trivy scan, GitOps trigger |
-| 10 | Phase 6 — Part A | OTel SDK in Flask app, Collector deployed, Tempo installed |
-| 11 | Phase 6 — Part B | Traces dashboard in Grafana, traceToLogs configured |
-| 12 | Phase 7 | Recording rules, SLO dashboard, error budget burn rate alerts |
-| 13 | Phase 8 | Kubecost installed, cost allocation screenshot in README |
-| 14 | Phase 9 — Part A | k8s_health_check.py and log_parser.py done |
-| 15 | Phase 9 — Part B | aws_cost_report.py done, all scripts tested and documented |
-| 16 | Phase 10 | README complete, architecture diagram, 5 ADRs, final push |
+| Weekend | Phase | Deliverable (checklist milestone) |
+|---------|-------|-----------------------------------|
+| 1 | Phase 1 — Part A | Phase 1: Kind cluster + Flask app containerised |
+| 2 | Phase 1 — Part B | Phase 1 checklist complete: Helm chart deployed end-to-end |
+| 3 | Phase 2 — Part A | Phase 2: ArgoCD installed, app syncing from Git |
+| 4 | Phase 2 — Part B | Phase 2 checklist complete: App of Apps, drift correction, rollback |
+| 5 | Phase 3 — Part A | Phase 3: Vault installed, auth and policy configured |
+| 6 | Phase 3 — Part B | Phase 3 checklist complete: secrets injected, app reads from file |
+| 7 | Phase 4 — Part A | Phase 4: Kyverno policies in enforce mode |
+| 8 | Phase 4 — Part B | Phase 4 checklist complete: RBAC + NetworkPolicy with Calico |
+| 9 | Phase 5 | Phase 5 checklist complete: CI pipeline, Trivy gate, GitOps trigger |
+| 10 | Phase 6 — Part A | Phase 6: OTel instrumentation, Collector, Tempo installed |
+| 11 | Phase 6 — Part B | Phase 6 checklist complete: traceToLogs, traces dashboard |
+| 12 | Phase 7 | Phase 7 checklist complete: SLO dashboard, burn rate alerts |
+| 13 | Phase 8 | Phase 8 checklist complete: Kubecost analysis and cost alert |
+| 14 | Phase 9 — Part A | Phase 9: `k8s_health_check.py` and `log_parser.py` done |
+| 15 | Phase 9 — Part B | Phase 9 checklist complete: `aws_cost_report.py`, all scripts documented |
+| 16 | Phase 10 | Phase 10 checklist complete: README, ADRs, all phase evidence |
 
 ---
 
@@ -1328,6 +726,7 @@ Tempo vs Jaeger, Kubecost vs manual dashboards. Five ADRs minimum.
 ### Phase 1 — Kind and Helm
 - [Kind Quick Start](https://kind.sigs.k8s.io/docs/user/quick-start/)
 - [Helm Chart Best Practices](https://helm.sh/docs/chart_best_practices/)
+- [Helm Chart Tutorial: A Simple Guide for Beginners - Devopscube](https://devopscube.com/create-helm-chart/)
 
 ### Phase 2 — ArgoCD
 - [ArgoCD Getting Started](https://argo-cd.readthedocs.io/en/stable/getting_started/)
@@ -1375,48 +774,79 @@ Tempo vs Jaeger, Kubecost vs manual dashboards. Five ADRs minimum.
 
 ---
 
-## How to Talk About This Project in Interviews
+## How to Talk About This Project to Others
 
-*"Tell me about a personal project you have worked on."*
+Use this when explaining the project to peers, in study groups, on a blog,
+or when helping someone else reproduce your setup.
 
-> "I built a cloud-native GitOps platform to systematically close gaps I identified
-> in my current work. It deploys a Python Flask API through a full GitOps pipeline —
-> GitHub Actions handles CI including Trivy image scanning, and ArgoCD handles delivery
-> by watching Git for changes. Secrets are injected at runtime using HashiCorp Vault's
-> agent injector. Kyverno enforces cluster policies — resource limits, no privileged
-> containers, no latest tags — as code through the same PR process as everything else.
-> RBAC is explicitly defined per workload with least-privilege ServiceAccounts, and
-> NetworkPolicy with Calico enforces default-deny between namespaces.
->
-> On the observability side, I implemented all three pillars — Prometheus for metrics
-> with formal SLO recording rules and an error budget burn rate dashboard, Grafana Loki
-> for logs, and OpenTelemetry with Grafana Tempo for distributed traces — all correlated
-> in a single Grafana instance. I also added Kubecost for namespace-level cost visibility
-> and efficiency scoring. The entire setup runs locally on Kind so anyone can reproduce
-> it, and every architectural decision is documented as an ADR."
+### The One-Minute Overview
 
-That answer covers every gap. It shows systems thinking, security depth, observability
-maturity, and cost awareness. It is a complete senior-level answer.
+This is a cloud-native GitOps learning platform built around a simple Python Flask API.
+The app itself is minimal — the learning is in the platform: GitHub Actions builds and
+scans images, ArgoCD deploys from Git, Vault injects secrets at runtime, Kyverno enforces
+cluster policies, RBAC and NetworkPolicy provide identity and network isolation, and
+Prometheus, Loki, Tempo, and Grafana give correlated metrics, logs, and traces with
+formal SLOs. Kubecost adds namespace-level cost visibility. Python scripts automate
+operational checks. Everything runs locally on Kind so it is reproducible, and architectural
+decisions are documented as ADRs.
+
+### Architecture Walkthrough (layer by layer)
+
+- **Delivery:** GitHub Actions → ghcr.io → ArgoCD → Helm → Kind (dev/prod namespaces)
+- **Secrets:** Vault Kubernetes auth → Agent Injector → secret files in pod
+- **Security:** Kyverno admission policies → RBAC least privilege → NetworkPolicy default-deny with Calico
+- **Observability:** OTel SDK → Collector → Tempo; Prometheus recording rules → SLO dashboard; traceToLogs correlation
+- **Operations:** Kubecost cost allocation; Python scripts for health, cost, and log analysis
+
+### Questions Others Might Ask — and What to Explain
+
+| Question | What to cover |
+|----------|---------------|
+| Why GitOps instead of `kubectl apply`? | Git as single source of truth, drift detection, audit trail, rollback via revert |
+| Why Vault instead of Kubernetes Secrets? | Encryption at rest, audit logs, fine-grained policies, injection without app code changes |
+| Why Kyverno at admission time? | Blocks non-compliant resources before they run; policies versioned in Git like everything else |
+| Why default-deny NetworkPolicy? | Flat network trust is the K8s default; explicit allows only for required traffic flows |
+| Why OpenTelemetry instead of a vendor SDK? | Instrument once, switch backends without code changes; Collector decouples app from backend |
+| Why formal SLOs? | Vague "available" claims are not actionable; error budgets align reliability work with feature velocity |
+| Why Kubecost on top of cloud billing? | Namespace and workload granularity; efficiency score reveals over-provisioning |
+
+Tie each answer to something you built, tested, and can demonstrate on your Kind cluster.
+
+### Teaching Back What You Learned
+
+Can you explain each phase's **problem**, **solution**, and **trade-off** without reading the README?
+
+- Phase 1: Why non-root containers and resource limits matter before policy enforcement
+- Phase 2: What happens when someone manually changes the cluster outside Git
+- Phase 3: Why secrets as files beat environment variables for sensitive data
+- Phase 4: Three security layers — what each catches that the others miss
+- Phase 5: What Trivy blocks in CI and how documented exceptions work
+- Phase 6: What traces reveal that metrics alone cannot
+- Phase 7: How error budget burn rate drives operational decisions
+- Phase 8: What efficiency score tells you about resource requests
+- Phase 9: What each automation script replaces that you used to do manually
+
+If you cannot explain a phase, revisit its checklist before moving on.
 
 ---
 
-## Final Checklist Before Applying
+## Final Learning Completion Checklist
 
-- [ ] Repo is public on GitHub with a pinned profile entry
+- [ ] All ten phase completion checklists ticked with evidence (screenshots, test output, or notes in `docs/`)
 - [ ] README has an architecture diagram (Mermaid is fine)
-- [ ] Every command in the README actually works end to end
-- [ ] GitHub Actions pipeline shows a green checkmark
+- [ ] Every command in the README getting started section works end to end on a fresh Kind cluster
+- [ ] GitHub Actions pipeline runs green
 - [ ] Trivy scan results visible in GitHub Security tab
 - [ ] Kyverno policies in enforce mode with violation example documented
 - [ ] RBAC manifests present with `kubectl auth can-i` test results documented
 - [ ] NetworkPolicy working with Calico — test results documented
 - [ ] Tempo traces visible in Grafana with traceToLogs working
-- [ ] SLO dashboard screenshot in README showing error budget panel
-- [ ] Kubecost cost allocation screenshot in README
+- [ ] SLO dashboard showing error budget panel
+- [ ] Kubecost cost allocation documented with efficiency analysis
 - [ ] Python scripts have `requirements.txt` and usage examples
 - [ ] `decisions.md` has at least 5 ADRs
 - [ ] `.gitignore` present — no secrets or kubeconfigs committed
-- [ ] At least one PR in the repo history showing your development workflow
+- [ ] Repo is reproducible and shareable (optional: public on GitHub for peer learning)
 
 ---
 

@@ -1,0 +1,13 @@
+# ref: https://helm.sh/docs/topics/charts#the-chartyaml-file
+apiVersion: v2
+name: flask-app
+description: Helm chart for Flask App
+type: application
+version: 0.1.1
+appVersion: "1.16.0"
+keywords:
+  - flask-app
+  - cloud-learning
+maintainers:
+  - name: subin
+    email: subinkrishnavv3@gmail.com
