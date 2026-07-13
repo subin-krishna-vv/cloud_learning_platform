@@ -1,28 +1,34 @@
 appLabel: flask-app
 versionLabel: v1
-replicaCount: 2
+environment: production
+# replicaCount: 2
 containerName: flask-app-container
 image:
   repository: kind_flask_app
   tag: latest
   pullPolicy: IfNotPresent
-containerPortName: http
-containerPort: 5000
-containerPortProtocol: TCP
+ports:
+  - name: "http"
+    containerPort: 5000
+    protocol: "TCP"
 livenessProbe:
-  path: /health/live
-  port: 5000
+  httpGet:
+    path: /health/live
+    port: 5000
   initialDelaySeconds: 5
   periodSeconds: 10
   timeoutSeconds: 1
   failureThreshold: 3
+
 readinessProbe:
-  path: /health/ready
-  port: 5000
+  httpGet:
+    path: /health/ready
+    port: 5000
   initialDelaySeconds: 5
   periodSeconds: 10
-  timeoutSeconds: 1 
+  timeoutSeconds: 1
   failureThreshold: 3
+
 resources:
   requests:
     cpu: 100m
@@ -30,6 +36,7 @@ resources:
   limits:
     cpu: 200m
     memory: 256Mi
+
 env:
   - name: FLASK_ENV
     value: development
@@ -39,9 +46,11 @@ env:
     value: INFO
   - name: APP_PORT
     value: "5000"
+    
 service:
   type: ClusterIP
-  portName: http
-  port: 5000
-  targetPort: 5000
-  protocol: TCP 
+  ports:
+    - name: "http"
+      port: 5000
+      targetPort: 5000
+      protocol: "TCP"

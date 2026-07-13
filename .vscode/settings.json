@@ -1,0 +1,8 @@
+{
+    "yaml.disableSchemaDetection": [
+        "file:///home/subink/personal/cloud_learning_platform/cloudnative-platform/helm/my-flask-app/templates/_helpers.tpl"
+    ],
+    "yaml.schemas": {
+        "https://www.schemastore.org/helmfile.json": "file:///home/subink/personal/cloud_learning_platform/cloudnative-platform/helm/my-flask-app/templates/_helpers.tpl"
+    }
+}

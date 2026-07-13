@@ -1,69 +1,79 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ .Release.Name }}-deployment
-  namespace: {{ .Values.namespace | default .Release.Namespace }}
+  name: {{ include "app.fullname" . }}-deployment
+  namespace: {{ include "app.namespace" . }}
   labels:
-    app: {{ .Values.appLabel}}
-    version: {{ .Values.versionLabel}}
+    {{ include "app.commonlabels" . | nindent 4 }}
 spec:
+  {{- if eq .Values.environment "production" }}
   replicas: {{ .Values.replicaCount | default 2 }}
+  {{- else }}
+  replicas: {{ .Values.replicaCount | default 1 }}
+  {{- end }}
   selector:
     matchLabels:
-      app: {{ .Values.appLabel}}
+      {{ include "app.selectorlabels" . | nindent 6 }}
   template:
     metadata:
       labels:
-        app: {{ .Values.appLabel}}
-        version: {{ .Values.versionLabel}}
+        {{ include "app.selectorlabels" . | nindent 8 }}
     spec:
       containers:
       - name: {{ .Values.containerName}}
         image: {{ .Values.image.repository }}:{{ .Values.image.tag }}
         imagePullPolicy: {{ .Values.image.pullPolicy | default "IfNotPresent" }}
         ports:
-        - name: {{ .Values.containerPortName | default "http" }}
-          containerPort: {{ .Values.containerPort }}
-          protocol: {{ .Values.containerPortProtocol | default "TCP" }}
+          {{- with .Values.ports }}
+          {{- toYaml . | nindent 10 }}
+          {{- else }}
+          - name: "http" 
+            containerPort: {{ .Values.containerPort }}
+            protocol: "TCP"
+          {{- end }}
         
         # Liveness Probe
         livenessProbe:
+          {{- with .Values.livenessProbe }}
+          {{- toYaml . | nindent 10 }}
+          {{- else }}
           httpGet:
-            path: {{ .Values.livenessProbe.path | default "/health" }}
-            port: {{ .Values.livenessProbe.port | default 80 }}
-          initialDelaySeconds: {{ .Values.livenessProbe.initialDelaySeconds | default 5 }}
-          periodSeconds: {{ .Values.livenessProbe.periodSeconds | default 10 }}
-          timeoutSeconds: {{ .Values.livenessProbe.timeoutSeconds | default 1 }}
-          failureThreshold: {{ .Values.livenessProbe.failureThreshold | default 3 }}
+            path: "/"
+            port: 80
+          initialDelaySeconds: 5
+          periodSeconds: 10 
+          timeoutSeconds: 1 
+          failureThreshold: 3
+          {{- end }}
         
         # Readiness Probe
         readinessProbe:
+          {{- with .Values.readinessProbe }}
+          {{- toYaml . | nindent 10 }}
+          {{- else }}
           httpGet:
-            path: {{ .Values.readinessProbe.path | default "/ready" }}
-            port: {{ .Values.readinessProbe.port | default 80 }}
-          initialDelaySeconds: {{ .Values.readinessProbe.initialDelaySeconds | default 5 }}
-          periodSeconds: {{ .Values.readinessProbe.periodSeconds | default 10 }}
-          timeoutSeconds: {{ .Values.readinessProbe.timeoutSeconds | default 1 }}
-          failureThreshold: {{ .Values.readinessProbe.failureThreshold | default 3 }}
-        
+            path: "/ready" 
+            port: 80
+          initialDelaySeconds: 5 
+          periodSeconds: 10
+          timeoutSeconds: 1
+          failureThreshold: 3
+          {{- end }}
         # Resource limits
         resources:
+          {{- with .Values.resources }}
+          {{- toYaml . | nindent 10 }}
+          {{- else }}
           requests:
-            cpu: {{ .Values.resources.requests.cpu | default "100m" }}
-            memory: {{ .Values.resources.requests.memory |default "128Mi"}}
+            cpu: "100m"
+            memory: "128Mi"
           limits:
-            cpu: {{ .Values.resources.limits.cpu | default "200m" }}
-            memory: {{ .Values.resources.limits.memory | default "256Mi" }}
-        
+            cpu: "200m" 
+            memory: "256Mi"
+          {{- end }}
         # Environment variables
         env:
           {{- range .Values.env }}
           - name: {{ .name }}
             value: {{ .value | quote }}
             {{- end }}
-        # - name: FLASK_ENV
-        #   value: "production"
-        # - name: LOG_LEVEL
-        #   value: "INFO"
-        # - name: APP_PORT
-        #   value: "5000"
